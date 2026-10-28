@@ -1,99 +1,171 @@
-# PR 1: Core Graph Algorithm Enhancements
+# PR 2: API Endpoint Updates
 
 ## Resumen
-Mejora significativa de los algoritmos de grafo en `graph.py` para soportar la Feature 2: Exploración de relaciones. Los cambios añaden capacidades de análisis de paths, clasificación semántica de relaciones y análisis de alcanzabilidad.
+Actualización de endpoints REST en `api.py` para exponer la funcionalidad mejorada de Feature 2. Incluye formato de respuesta enriquecido para BFS/DFS y nuevo endpoint de reachability.
 
 ## Archivos Modificados
-- `ComercioConecta/graph.py` (~120 líneas agregadas)
+- `ComercioConecta/api.py` (~50 líneas agregadas/modificadas)
 
 ## Cambios Detallados
 
-### 1. Nuevo método `_nivel_relacion(distance)` (líneas ~127-140)
-```python
-def _nivel_relacion(self, distance):
-    """Clasifica el nivel de relación comercial según la distancia en el grafo."""
-    if distance == 1:
-        return "directo"
-    elif distance == 2:
-        return "indirecto"
-    else:
-        return "lejano"
+### 1. Endpoint BFS Actualizado (`GET /explore/bfs/<product_id>?depth=<int>`)
+
+**Nueva respuesta (antes era tuplas simples):**
+```json
+{
+  "start_product": "P001",
+  "max_depth": 2,
+  "algorithm": "bfs",
+  "results_count": 4,
+  "results": [
+    {
+      "product_id": "P002",
+      "product_name": "Pan",
+      "distance": 1,
+      "cumulative_weight": 0.85,
+      "path": ["P001", "P002"],
+      "nivel_relacion": "directo",
+      "alcanzable": true
+    },
+    {
+      "product_id": "P004",
+      "product_name": "Mantequilla",
+      "distance": 2,
+      "cumulative_weight": 0.765,
+      "path": ["P001", "P002", "P004"],
+      "nivel_relacion": "indirecto",
+      "alcanzable": true
+    }
+  ]
+}
 ```
-**Propósito:** Proporciona una clasificación semántica entendible por usuarios de negocio en lugar de solo distancias numéricas.
 
-### 2. BFS Mejorado (líneas ~142-180)
-**Antes:** Retornaba lista de tuplas `(product, distance, cumulative_weight)`
-**Ahora:** Retorna lista de dicts con:
-- `product`: objeto Product
-- `distance`: int
-- `cumulative_weight`: float
-- `path`: lista de productos en el camino
-- `nivel_relacion`: "directo"/"indirecto"/"lejano"
-- `alcanzable`: boolean (siempre True en BFS)
+**Cambios en código:**
+- Agregado campo `"algorithm": "bfs"` para identificación
+- Cada resultado incluye `path`, `nivel_relacion`, `alcanzable`
+- Docstring expandido explicando por qué BFS es primario
 
-**Cambios clave:**
-- Queue ahora incluye `path` para rastrear el camino completo
-- Resultados incluyen clasificación semántica y path para visualización 2D
-- Ordenamiento consistente: distancia ascendente, peso descendente
+### 2. Endpoint DFS Actualizado (`GET /explore/dfs/<product_id>?depth=<int>`)
 
-### 3. DFS Mejorado (líneas ~182-240)
-**Antes:** Retornaba lista de tuplas sin path (por consistencia con BFS viejo)
-**Ahora:** Retorna lista de dicts **idénticos en estructura a BFS**
-
-**Cambios clave:**
-- Ahora incluye `path`, `nivel_relacion`, `alcanzable` igual que BFS
-- Consistencia total entre algoritmos para el frontend
-- Documentación actualizada explicando cuándo usar cada uno
-
-### 4. Nuevo método `get_component_of_product(product_id)` (líneas ~262-278)
-```python
-def get_component_of_product(self, product_id):
-    """Retorna el componente conexo que contiene el producto dado."""
+**Nueva respuesta (ahora consistente con BFS):**
+```json
+{
+  "start_product": "P001",
+  "max_depth": 2,
+  "algorithm": "dfs",
+  "results_count": 4,
+  "results": [
+    {
+      "product_id": "P002",
+      "product_name": "Pan",
+      "distance": 1,
+      "cumulative_weight": 0.85,
+      "path": ["P001", "P002"],
+      "nivel_relacion": "directo",
+      "alcanzable": true
+    }
+    // ... mismos campos que BFS
+  ]
+}
 ```
-**Propósito:** Determina si dos productos están en el mismo grupo o son desconectados.
 
-### 5. Nuevo método `get_reachability_summary(start_product_id, max_depth)` (líneas ~280-360)
-Retorna dict completo con:
-- `start_product_id`, `start_product_name`, `max_depth`
-- `total_products`, `reachable_count`, `unreachable_count`
-- `component_ids`: IDs del componente del producto origen
-- `reachable`: lista detallada de productos alcanzables (con path, nivel, etc.)
-- `unreachable`: lista de productos NO alcanzables con:
-  - `product_id`, `product_name`
-  - `in_same_component`: boolean
-  - `reason`: "fuera_del_alcance" (mismo componente, más allá de depth) o "otro_componente"
+**Cambios en código:**
+- Agregado campo `"algorithm": "dfs"`
+- Estructura idéntica a BFS para consistencia en frontend
+- Docstring expandido explicando uso para cadenas largas de influencia
 
-**Propósito:** Base para endpoint `/explore/reachability` y visualización 2D que muestra productos conectados vs desconectados.
+### 3. Nuevo Endpoint: Reachability (`GET /explore/reachability/<product_id>?depth=<int>`)
 
-## Impacto en el Sistema
+**Respuesta completa:**
+```json
+{
+  "start_product_id": "P001",
+  "start_product_name": "Leche",
+  "max_depth": 2,
+  "total_products": 9,
+  "reachable_count": 4,
+  "unreachable_count": 4,
+  "component_ids": ["P001", "P002", "P003", "P004", "P005"],
+  "reachable": [
+    {
+      "product_id": "P002",
+      "product_name": "Pan",
+      "distance": 1,
+      "cumulative_weight": 0.85,
+      "path": ["P001", "P002"],
+      "nivel_relacion": "directo",
+      "alcanzable": true
+    }
+    // ... todos los alcanzables con detalles completos
+  ],
+  "unreachable": [
+    {
+      "product_id": "P007",
+      "product_name": "Aceite",
+      "in_same_component": false,
+      "reason": "otro_componente"
+    },
+    {
+      "product_id": "P009",
+      "product_name": "Sal",
+      "in_same_component": false,
+      "reason": "otro_componente"
+    }
+    // ... productos en otros componentes o fuera de depth
+  ]
+}
+```
 
-| Componente | Impacto |
-|------------|---------|
-| API (api.py) | Requiere PR 2 para exponer nuevos campos |
-| Frontend | Puede mostrar path, nivel_relacion, alcanzables vs no alcanzables |
-| Tests | Requiere PR 3 para validar nuevos comportamientos |
-| Docs | Requiere PR 4 para documentar nuevos métodos |
+**Parámetros:**
+- `product_id` (path): ID del producto origen
+- `depth` (query, opcional, default=2): Profundidad máxima
+
+**Códigos de respuesta:**
+- `200`: Éxito con resumen completo
+- `400`: Depth inválido (< 1)
+- `404`: Producto no existe
+- `400`: Error interno (excepción genérica)
+
+### 4. Mejor Manejo de Errores
+
+**BFS/DFS/Reachability:** Todos capturan `Exception` genérica y retornan 400 con mensaje de error.
+
+## Impacto en Frontend
+
+El frontend (`exploration_tab.py`) ya está preparado para consumir:
+- `path` → Para visualización 2D (dibujar aristas entre nodos intermedios)
+- `nivel_relacion` → Para mostrar badges semánticos (Directo/Indirecto/Lejano)
+- `alcanzable` → Para lógica de visualización (siempre true en BFS/DFS resultados)
+- Endpoint reachability → Para vista 2D completa con zona de desconectados
+
+## Dependencias
+
+**Requiere:** PR 1 (graph.py) - Los nuevos campos vienen de `graph.bfs()`, `graph.dfs()`, `graph.get_reachability_summary()`
 
 ## Validación
-```bash
-# Ejecutar tests existentes (Feature 1)
-python -m pytest test_exploration.py -v
 
-# Verificar que BFS/DFS retornan nueva estructura
-python -c "
-from graph import ProductGraph
-from models import Product
-g = ProductGraph()
-g.add_product(Product('P1', 'Leche'))
-g.add_product(Product('P2', 'Pan'))
-g.add_relationship('P1', 'P2', 0.8)
-result = g.bfs('P1', 2)
-print(result[0].keys())  # Debe incluir: product, distance, cumulative_weight, path, nivel_relacion, alcanzable
-"
+```bash
+# Iniciar API
+python api.py
+
+# En otra terminal, probar endpoints
+curl "http://127.0.0.1:5000/explore/bfs/P001?depth=2" | jq '.results[0] | keys'
+# Debe mostrar: algorithm, results_count, results (con path, nivel_relacion, alcanzable)
+
+curl "http://127.0.0.1:5000/explore/dfs/P001?depth=2" | jq '.results[0] | keys'
+# Misma estructura que BFS
+
+curl "http://127.0.0.1:5000/explore/reachability/P001?depth=2" | jq '. | keys'
+# Debe mostrar: start_product_id, start_product_name, max_depth, total_products, reachable_count, unreachable_count, component_ids, reachable, unreachable
+
+# Probar errores
+curl "http://127.0.0.1:5000/explore/bfs/P001?depth=0"  # Debe retornar 400
+curl "http://127.0.0.1:5000/explore/reachability/P999?depth=2"  # Debe retornar 404
 ```
 
 ## Notas de Implementación
-- **Sin dependencias externas**: Algoritmos propios según guía común
-- **Backward compatibility**: API cambia formato (requiere PR 2 coordinado)
-- **Performance**: BFS/DFS O(V+E) sin cambios en complejidad
-- **Memory**: Path tracking añade O(depth) por resultado, aceptable para depth ≤ 4
+
+- **Breaking change**: Formato de respuesta BFS/DFS cambió (era tuplas, ahora objetos)
+- **Versionado**: Considerar versionar API si hay consumidores externos
+- **Performance**: Endpoint reachability llama internamente a BFS + análisis de componentes, O(V+E)
+- **Consistencia**: BFS y DFS ahora tienen estructura idéntica para facilitar frontend
