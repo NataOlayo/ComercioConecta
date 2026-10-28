@@ -1,187 +1,99 @@
-# ComercioConecta - Feature 1: Red comercial inicial
+# PR 1: Core Graph Algorithm Enhancements
 
-## Descripción del proyecto
+## Resumen
+Mejora significativa de los algoritmos de grafo en `graph.py` para soportar la Feature 2: Exploración de relaciones. Los cambios añaden capacidades de análisis de paths, clasificación semántica de relaciones y análisis de alcanzabilidad.
 
-ComercioConecta es una aplicación que ayuda a tiendas de barrio a entender qué productos se compran juntos para proponer combinaciones comerciales razonables. Esta implementación corresponde a la **Feature 1: Red comercial inicial**, que permite crear y listar productos y relaciones, rechazando duplicados y datos inválidos, y mostrando la red mediante una API REST y una interfaz frontend.
+## Archivos Modificados
+- `ComercioConecta/graph.py` (~120 líneas agregadas)
 
-## Características implementadas
+## Cambios Detallados
 
-### Backend (API REST)
-- **Lenguaje**: Python 3.13
-- **Framework**: Flask 3.1
-- **Endpoints disponibles**:
-  - `GET /products` - Listar todos los productos
-  - `GET /products/<id>` - Obtener producto específico
-  - `POST /products` - Agregar nuevo producto (ID auto-generado: P001, P002, ...)
-  - `DELETE /products/<id>` - Eliminar producto
-  - `GET /relationships` - Listar todas las relaciones
-  - `POST /relationships` - Agregar nueva relación
-  - `GET /graph/info` - Obtener información completa del grafo
-  - `GET /explore/bfs/<id>?depth=N` - Exploración en amplitud (BFS)
-  - `GET /explore/dfs/<id>?depth=N` - Exploración en profundidad (DFS)
-  - `GET /components` - Obtener componentes conexos del grafo
-- **Datos de prueba (seed data)**: 8 productos y 8 relaciones precargados al iniciar
+### 1. Nuevo método `_nivel_relacion(distance)` (líneas ~127-140)
+```python
+def _nivel_relacion(self, distance):
+    """Clasifica el nivel de relación comercial según la distancia en el grafo."""
+    if distance == 1:
+        return "directo"
+    elif distance == 2:
+        return "indirecto"
+    else:
+        return "lejano"
+```
+**Propósito:** Proporciona una clasificación semántica entendible por usuarios de negocio en lugar de solo distancias numéricas.
 
-### Frontend (Interfaz Streamlit)
-- **Tecnología**: Streamlit 1.64
-- **Pestañas**:
-  - 📦 **Productos**: Catálogo con ID y nombre, agregar productos (solo nombre, ID auto)
-  - 🔗 **Relaciones**: Tabla con "ID - Nombre" en ambas columnas, pesos como %, agregar con dropdowns
-  - 🔍 **Exploración**: BFS/DFS con selector "ID - Nombre", peso acumulado como %
-  - 📊 **Componentes**: Grupos de productos interconectados con detalle expandible
-- **Carga automática**: Datos se cargan al abrir la app (sin botón de refresh)
-- **Validaciones locales con detalle**:
-  - Producto duplicado → muestra ID y nombre del existente
-  - Relación duplicada → muestra ambos productos, peso actual vs intentado
+### 2. BFS Mejorado (líneas ~142-180)
+**Antes:** Retornaba lista de tuplas `(product, distance, cumulative_weight)`
+**Ahora:** Retorna lista de dicts con:
+- `product`: objeto Product
+- `distance`: int
+- `cumulative_weight`: float
+- `path`: lista de productos en el camino
+- `nivel_relacion`: "directo"/"indirecto"/"lejano"
+- `alcanzable`: boolean (siempre True en BFS)
 
-### Algoritmos de grafo propios
-- **Grafo no dirigido**: Las relaciones "se compran juntos" son simétricas
-- **BFS (Breadth-First Search)**: Exploración por niveles con peso acumulado
-- **DFS (Depth-First Search)**: Exploración en profundidad evitando ciclos
-- **Componentes conexos**: Identifica grupos de productos aislados entre sí
-- **Validaciones**:
-  - Productos únicos por nombre (case-insensitive)
-  - Relaciones no duplicadas (en ninguna dirección A-B = B-A)
-  - Pesos en rango (0, 1]
-  - Relaciones solo entre productos diferentes
-  - Profundidad mínima de 1 en exploraciones
+**Cambios clave:**
+- Queue ahora incluye `path` para rastrear el camino completo
+- Resultados incluyen clasificación semántica y path para visualización 2D
+- Ordenamiento consistente: distancia ascendente, peso descendente
 
-## Decisiones de diseño
+### 3. DFS Mejorado (líneas ~182-240)
+**Antes:** Retornaba lista de tuplas sin path (por consistencia con BFS viejo)
+**Ahora:** Retorna lista de dicts **idénticos en estructura a BFS**
 
-### Modelo de grafo
-- **Representación**: Lista de adyacencia usando diccionarios anidados
-- **Dirección**: No dirigido (relaciones simétricas)
-- **Peso**: Valor en (0, 1] representando fuerza/frecuencia de co-compra normalizada
-- **Justificación**: Una relación "se compran juntos" es inherentemente simétrica - si el producto A se compra con el producto B, entonces el producto B se compra con el producto A
+**Cambios clave:**
+- Ahora incluye `path`, `nivel_relacion`, `alcanzable` igual que BFS
+- Consistencia total entre algoritmos para el frontend
+- Documentación actualizada explicando cuándo usar cada uno
 
-### Algoritmo de exploración
-- **BFS seleccionado** para consultas de relaciones porque:
-  - Encuentra el camino más corto primero
-  - Es intuitivo para usuarios que quieren ver relaciones cercanas
-  - Permite controlar el alcance con el parámetro de profundidad
-- **Límite de profundidad 2** justificado por:
-  - Profundidad 1: Relaciones directas (útiles para paquetes inmediatos)
-  - Profundidad 2: Relaciones vía un intermediario (útiles para recomendaciones de combos)
-  - Profundidad > 2: Tiende a generar recomendaciones poco relevantes o demasiado amplias
-- **Peso acumulado multiplicativo**: Representa aproximación de probabilidad conjunta en cadena de compras
+### 4. Nuevo método `get_component_of_product(product_id)` (líneas ~262-278)
+```python
+def get_component_of_product(self, product_id):
+    """Retorna el componente conexo que contiene el producto dado."""
+```
+**Propósito:** Determina si dos productos están en el mismo grupo o son desconectados.
 
-## Requisitos del sistema
+### 5. Nuevo método `get_reachability_summary(start_product_id, max_depth)` (líneas ~280-360)
+Retorna dict completo con:
+- `start_product_id`, `start_product_name`, `max_depth`
+- `total_products`, `reachable_count`, `unreachable_count`
+- `component_ids`: IDs del componente del producto origen
+- `reachable`: lista detallada de productos alcanzables (con path, nivel, etc.)
+- `unreachable`: lista de productos NO alcanzables con:
+  - `product_id`, `product_name`
+  - `in_same_component`: boolean
+  - `reason`: "fuera_del_alcance" (mismo componente, más allá de depth) o "otro_componente"
 
-- Python 3.12+
-- Dependencias listadas en `requirements.txt`
+**Propósito:** Base para endpoint `/explore/reachability` y visualización 2D que muestra productos conectados vs desconectados.
 
-## Instalación y ejecución
+## Impacto en el Sistema
 
-### Opción 1: Ejecutar todo con un solo comando (recomendado)
+| Componente | Impacto |
+|------------|---------|
+| API (api.py) | Requiere PR 2 para exponer nuevos campos |
+| Frontend | Puede mostrar path, nivel_relacion, alcanzables vs no alcanzables |
+| Tests | Requiere PR 3 para validar nuevos comportamientos |
+| Docs | Requiere PR 4 para documentar nuevos métodos |
+
+## Validación
 ```bash
-# Desde el directorio comercioconecta/
-.\iniciar.bat
-```
-Este script abrirá automáticamente dos ventanas:
-1. API Flask en http://127.0.0.1:5000
-2. Frontend Streamlit en http://localhost:8501
+# Ejecutar tests existentes (Feature 1)
+python -m pytest test_exploration.py -v
 
-### Opción 2: Ejecutar manualmente
-```bash
-# 1. Crear entorno virtual (si no existe)
-python -m venv .venv
-
-# 2. Activar entorno virtual
-.\.venv\Scripts\activate
-
-# 3. Instalar dependencias
-pip install -r requirements.txt
-
-# 4. Iniciar la API (en una terminal)
-.\.venv\Scripts\python.exe api.py
-
-# 5. Iniciar el frontend (en otra terminal)
-.\.venv\Scripts\streamlit.exe run frontend/app.py
+# Verificar que BFS/DFS retornan nueva estructura
+python -c "
+from graph import ProductGraph
+from models import Product
+g = ProductGraph()
+g.add_product(Product('P1', 'Leche'))
+g.add_product(Product('P2', 'Pan'))
+g.add_relationship('P1', 'P2', 0.8)
+result = g.bfs('P1', 2)
+print(result[0].keys())  # Debe incluir: product, distance, cumulative_weight, path, nivel_relacion, alcanzable
+"
 ```
 
-## Pruebas de aceptación
-
-Ejecutar el script de pruebas contra la API local:
-```bash
-.\.venv\Scripts\python.exe acceptance_test.py --start
-```
-El script iniciará la API automáticamente, ejecutará las pruebas y guardará los resultados en `acceptance_output.txt`.
-
-## Estructura del proyecto
-
-```
-comercioconecta/
-├── api.py                 # API REST con Flask
-├── graph.py               # Implementación del grafo y algoritmos
-├── models.py              # Clases Product y Relationship
-├── requirements.txt       # Dependencias del proyecto
-├── acceptance_test.py     # Script de pruebas de aceptación
-├── iniciar.bat            # Script para lanzamiento doble (API + Frontend)
-├── frontend/
-│   └── app.py             # Interfaz Streamlit
-└── README.md              # Este archivo
-```
-
-## Endpoints de la API
-
-### Productos
-```
-GET    /products
-GET    /products/<id>
-POST   /products     {"name": "<string>"}          # ID auto-generado (P001, P002, ...)
-DELETE /products/<id>
-```
-
-### Relaciones
-```
-GET    /relationships
-POST   /relationships {"product_a": "<string>", "product_b": "<string>", "weight": <float>}
-```
-
-### Información y exploración
-```
-GET    /graph/info
-GET    /explore/bfs/<id>?depth=<int>
-GET    /explore/dfs/<id>?depth=<int>
-GET    /components
-```
-
-### Códigos de estado HTTP
-- 200: Éxito
-- 201: Recurso creado
-- 400: Solicitud inválida (datos faltantes o inválidos)
-- 404: Recurso no encontrado
-- 409: Conflicto (duplicado)
-- 500: Error interno del servidor
-
-## Datos de prueba (Seed Data)
-
-Al iniciar la API, se cargan automáticamente:
-
-**Productos (8):**
-| ID | Nombre |
-|----|--------|
-| P001 | Leche |
-| P002 | Pan |
-| P003 | Huevos |
-| P004 | Mantequilla |
-| P005 | Café |
-| P006 | Azúcar |
-| P007 | Aceite |
-| P008 | Arroz |
-
-**Relaciones (8):**
-| Producto A | Producto B | Peso | % |
-|------------|------------|------|---|
-| Leche | Pan | 0.85 | 85% |
-| Leche | Huevos | 0.70 | 70% |
-| Pan | Mantequilla | 0.90 | 90% |
-| Huevos | Mantequilla | 0.65 | 65% |
-| Café | Azúcar | 0.80 | 80% |
-| Aceite | Arroz | 0.75 | 75% |
-| Leche | Café | 0.40 | 40% |
-| Pan | Huevos | 0.55 | 55% |
-
-**Componentes conexos (2):**
-1. **Componente principal** (6 productos): Leche, Pan, Huevos, Café, Mantequilla, Azúcar
-2. **Componente secundario** (2 productos): Aceite, Arroz
+## Notas de Implementación
+- **Sin dependencias externas**: Algoritmos propios según guía común
+- **Backward compatibility**: API cambia formato (requiere PR 2 coordinado)
+- **Performance**: BFS/DFS O(V+E) sin cambios en complejidad
+- **Memory**: Path tracking añade O(depth) por resultado, aceptable para depth ≤ 4
