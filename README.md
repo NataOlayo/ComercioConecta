@@ -1,132 +1,171 @@
-# PR 3: Feature 2 Acceptance Tests
+# PR 2: API Endpoint Updates
 
 ## Resumen
-Nuevo archivo de pruebas de aceptación comprehensivo para Feature 2: `acceptance_test_feature2.py`. Valida todos los escenarios requeridos por la especificación de Feature 2.
+Actualización de endpoints REST en `api.py` para exponer la funcionalidad mejorada de Feature 2. Incluye formato de respuesta enriquecido para BFS/DFS y nuevo endpoint de reachability.
 
-## Archivos Nuevos
-- `ComercioConecta/acceptance_test_feature2.py` (~457 líneas - archivo completo nuevo)
+## Archivos Modificados
+- `ComercioConecta/api.py` (~50 líneas agregadas/modificadas)
 
-## Escenarios de Prueba Cubiertos
+## Cambios Detallados
 
-### 1. ESCENARIO NORMAL: BFS y DFS desde producto con conexiones
-- BFS desde producto con relaciones (Leche/P001) profundidad 2
-- Verifica: productos alcanzables esperados presentes (Pan, Huevos, Mantequilla, Café)
-- Verifica: **todos los resultados tienen `nivel_relacion`**
-- Verifica: **todos los resultados tienen `path`**
-- DFS desde mismo producto
-- Verifica: **DFS devuelve `path` completo**
+### 1. Endpoint BFS Actualizado (`GET /explore/bfs/<product_id>?depth=<int>`)
 
-### 2. ESCENARIO: Grafo Vacío (sin productos)
-- BFS desde producto inexistente en grafo vacío → 404
-- Reachability desde producto inexistente en grafo vacío → 404
-- Componentes en grafo vacío → 0 componentes
-
-### 3. ESCENARIO: Producto Inexistente
-- BFS desde P999 → 404
-- DFS desde P999 → 404
-- Reachability desde P999 → 404
-
-### 4. ESCENARIO: Producto Aislado (sin relaciones)
-- BFS desde P009 (Sal, aislado) → 0 resultados
-- Verifica: **no inventa recomendaciones** para productos sin conexiones
-
-### 5. ESCENARIO: Ruta/Relación Inexistente (Profundidad Insuficiente)
-- BFS desde P009 (aislado) no alcanza otros productos
-- BFS desde P001 profundidad 1 → **NO alcanza P004 (Mantequilla, distancia 2)**
-
-### 6. ESCENARIO: Datos Inválidos (Profundidad)
-- BFS con depth=0 → 400
-- BFS con depth=-1 → 400
-- DFS con depth=0 → 400
-- Reachability con depth=-1 → 400
-
-### 7. ESCENARIO: Componentes Conexos (Grupos Desconectados)
-- Listar componentes → **≥ 2 componentes esperados**
-- Verifica: **Producto aislado P009 en su propio componente**
-
-### 8. ESCENARIO: Reachability - Alcanzables vs No Alcanzables
-- Reachability desde P001 (Leche) profundidad 2
-- Verifica: **alcanzables correctos** (P002, P003, P004, P005)
-- Verifica: **no alcanzables correctos** (P007, P008, P009 - otros componentes)
-- Verifica: **todos los no alcanzables tienen campo `reason`**
-  - `"fuera_del_alcance"`: mismo componente pero más allá de max_depth
-  - `"otro_componente"`: componente diferente
-- Verifica: **conteos consistentes** (reachable_count == len(reachable), etc.)
-
-## Datos de Prueba (Seed)
-
-El test crea un grafo representativo:
-```
-Productos (9): P001-P009
-  P001: Leche        P005: Café
-  P002: Pan          P006: Azúcar
-  P003: Huevos       P007: Aceite
-  P004: Mantequilla  P008: Arroz
-  P009: Sal (aislado)
-
-Relaciones (9):
-  Leche-Pan (0.85)      Café-Azúcar (0.80)
-  Leche-Huevos (0.70)   Aceite-Arroz (0.75)
-  Pan-Mantequilla (0.90) Leche-Café (0.40)
-  Huevos-Mantequilla (0.65) Pan-Huevos (0.55)
-
-Componentes:
-  Componente 1: {P001, P002, P003, P004, P005, P006} - 6 productos conectados
-  Componente 2: {P007, P008} - 2 productos conectados
-  Componente 3: {P009} - 1 producto aislado
+**Nueva respuesta (antes era tuplas simples):**
+```json
+{
+  "start_product": "P001",
+  "max_depth": 2,
+  "algorithm": "bfs",
+  "results_count": 4,
+  "results": [
+    {
+      "product_id": "P002",
+      "product_name": "Pan",
+      "distance": 1,
+      "cumulative_weight": 0.85,
+      "path": ["P001", "P002"],
+      "nivel_relacion": "directo",
+      "alcanzable": true
+    },
+    {
+      "product_id": "P004",
+      "product_name": "Mantequilla",
+      "distance": 2,
+      "cumulative_weight": 0.765,
+      "path": ["P001", "P002", "P004"],
+      "nivel_relacion": "indirecto",
+      "alcanzable": true
+    }
+  ]
+}
 ```
 
-## Ejecución
+**Cambios en código:**
+- Agregado campo `"algorithm": "bfs"` para identificación
+- Cada resultado incluye `path`, `nivel_relacion`, `alcanzable`
+- Docstring expandido explicando por qué BFS es primario
 
-```bash
-# Asegurar que API esté corriendo en puerto 5000
-python api.py &
+### 2. Endpoint DFS Actualizado (`GET /explore/dfs/<product_id>?depth=<int>`)
 
-# Ejecutar tests Feature 2
-python acceptance_test_feature2.py
-
-# Resultado esperado:
-# ====================================================================
-# RESUMEN: XX/XX pruebas pasaron
-# [OK] Todas las pruebas de aceptación de Feature 2 pasaron!
+**Nueva respuesta (ahora consistente con BFS):**
+```json
+{
+  "start_product": "P001",
+  "max_depth": 2,
+  "algorithm": "dfs",
+  "results_count": 4,
+  "results": [
+    {
+      "product_id": "P002",
+      "product_name": "Pan",
+      "distance": 1,
+      "cumulative_weight": 0.85,
+      "path": ["P001", "P002"],
+      "nivel_relacion": "directo",
+      "alcanzable": true
+    }
+    // ... mismos campos que BFS
+  ]
+}
 ```
 
-## Códigos de Salida
-- `0`: Todas las pruebas pasaron
-- `1`: Una o más pruebas fallaron
+**Cambios en código:**
+- Agregado campo `"algorithm": "dfs"`
+- Estructura idéntica a BFS para consistencia en frontend
+- Docstring expandido explicando uso para cadenas largas de influencia
 
-## Métricas de Cobertura
+### 3. Nuevo Endpoint: Reachability (`GET /explore/reachability/<product_id>?depth=<int>`)
 
-| Categoría | Tests | Qué Valida |
-|-----------|-------|------------|
-| Funcionalidad Core | 4 | BFS/DFS estructura, path, nivel_relacion |
-| Edge Cases | 5 | Grafo vacío, producto inexistente, aislado, profundidad insuficiente |
-| Validación | 4 | Depth 0, negativo en BFS/DFS/Reachability |
-| Componentes | 2 | Múltiples componentes, producto aislado en componente propio |
-| Reachability | 4 | Alcanzables, no alcanzables, reasons, conteos |
+**Respuesta completa:**
+```json
+{
+  "start_product_id": "P001",
+  "start_product_name": "Leche",
+  "max_depth": 2,
+  "total_products": 9,
+  "reachable_count": 4,
+  "unreachable_count": 4,
+  "component_ids": ["P001", "P002", "P003", "P004", "P005"],
+  "reachable": [
+    {
+      "product_id": "P002",
+      "product_name": "Pan",
+      "distance": 1,
+      "cumulative_weight": 0.85,
+      "path": ["P001", "P002"],
+      "nivel_relacion": "directo",
+      "alcanzable": true
+    }
+    // ... todos los alcanzables con detalles completos
+  ],
+  "unreachable": [
+    {
+      "product_id": "P007",
+      "product_name": "Aceite",
+      "in_same_component": false,
+      "reason": "otro_componente"
+    },
+    {
+      "product_id": "P009",
+      "product_name": "Sal",
+      "in_same_component": false,
+      "reason": "otro_componente"
+    }
+    // ... productos en otros componentes o fuera de depth
+  ]
+}
+```
 
-**Total: ~19 aserciones verificadas**
+**Parámetros:**
+- `product_id` (path): ID del producto origen
+- `depth` (query, opcional, default=2): Profundidad máxima
+
+**Códigos de respuesta:**
+- `200`: Éxito con resumen completo
+- `400`: Depth inválido (< 1)
+- `404`: Producto no existe
+- `400`: Error interno (excepción genérica)
+
+### 4. Mejor Manejo de Errores
+
+**BFS/DFS/Reachability:** Todos capturan `Exception` genérica y retornan 400 con mensaje de error.
+
+## Impacto en Frontend
+
+El frontend (`exploration_tab.py`) ya está preparado para consumir:
+- `path` → Para visualización 2D (dibujar aristas entre nodos intermedios)
+- `nivel_relacion` → Para mostrar badges semánticos (Directo/Indirecto/Lejano)
+- `alcanzable` → Para lógica de visualización (siempre true en BFS/DFS resultados)
+- Endpoint reachability → Para vista 2D completa con zona de desconectados
 
 ## Dependencias
 
-**Requiere:** PR 1 + PR 2 (graph.py y api.py con funcionalidad Feature 2 completa)
+**Requiere:** PR 1 (graph.py) - Los nuevos campos vienen de `graph.bfs()`, `graph.dfs()`, `graph.get_reachability_summary()`
 
-## Integración con CI/CD
+## Validación
 
-```yaml
-# Ejemplo GitHub Actions
-- name: Run Feature 2 Acceptance Tests
-  run: |
-    python api.py &
-    sleep 3
-    python acceptance_test_feature2.py
-  # Exit code 1 fallará el job si hay fallos
+```bash
+# Iniciar API
+python api.py
+
+# En otra terminal, probar endpoints
+curl "http://127.0.0.1:5000/explore/bfs/P001?depth=2" | jq '.results[0] | keys'
+# Debe mostrar: algorithm, results_count, results (con path, nivel_relacion, alcanzable)
+
+curl "http://127.0.0.1:5000/explore/dfs/P001?depth=2" | jq '.results[0] | keys'
+# Misma estructura que BFS
+
+curl "http://127.0.0.1:5000/explore/reachability/P001?depth=2" | jq '. | keys'
+# Debe mostrar: start_product_id, start_product_name, max_depth, total_products, reachable_count, unreachable_count, component_ids, reachable, unreachable
+
+# Probar errores
+curl "http://127.0.0.1:5000/explore/bfs/P001?depth=0"  # Debe retornar 400
+curl "http://127.0.0.1:5000/explore/reachability/P999?depth=2"  # Debe retornar 404
 ```
 
-## Notas
+## Notas de Implementación
 
-- **Archivo nuevo cohesivo**: No se divide naturalmente en PRs menores
-- **Ligeramente > 400 líneas** (~457): Se mantiene junto por cohesión funcional
-- **Auto-limpieza**: `delete_all_products()` al inicio de cada escenario mayor
-- **Logging detallado**: Cada test imprime expected vs obtained para debugging
-- **Compatible**: No modifica `acceptance_test.py` (Feature 1 intacto)
+- **Breaking change**: Formato de respuesta BFS/DFS cambió (era tuplas, ahora objetos)
+- **Versionado**: Considerar versionar API si hay consumidores externos
+- **Performance**: Endpoint reachability llama internamente a BFS + análisis de componentes, O(V+E)
+- **Consistencia**: BFS y DFS ahora tienen estructura idéntica para facilitar frontend
