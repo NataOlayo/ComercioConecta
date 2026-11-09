@@ -1,32 +1,57 @@
 """
-Componente de barra lateral para el frontend de ComercioConecta
+Barra lateral: marca, navegación por tipo de usuario y estado de la red
 """
 import streamlit as st
-from datetime import datetime
+
+from frontend.utils.ui import render
+
+# Las secciones se agrupan según quién las usa: encargado de ventas o analista
+NAVIGATION = (
+    ("Consultar", (
+        ("propuesta", "Recomendaciones", ":material/storefront:"),
+        ("grupos", "Grupos de productos", ":material/workspaces:"),
+    )),
+    ("Registrar", (
+        ("productos", "Productos", ":material/inventory_2:"),
+        ("relaciones", "Relaciones", ":material/link:"),
+    )),
+)
+
+
+def _go_to(section):
+    st.session_state.section = section
 
 
 def render_sidebar():
-    """Renderiza la barra lateral con controles y información"""
-    st.header("🎯 Panel de Control")
+    """Dibuja la barra lateral y devuelve la sección activa"""
+    active = st.session_state.setdefault("section", "propuesta")
 
-    # Show current stats
-    if st.session_state.get('last_update'):
-        st.caption(f"Última actualización: {st.session_state.last_update}")
+    with st.sidebar:
+        render(
+            '<div class="cc-brand"><div class="cc-brand-name">ComercioConecta</div>'
+            '<div class="cc-brand-tag">Red comercial de tiendas de barrio</div></div>'
+        )
 
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("📦 Productos", len(st.session_state.get('products', [])))
-    with col2:
-        st.metric("🔗 Relaciones", len(st.session_state.get('relationships', [])))
+        for group, items in NAVIGATION:
+            render(f'<div class="cc-nav-label">{group}</div>')
+            for key, label, icon in items:
+                st.button(
+                    label,
+                    key=f"nav_{key}",
+                    icon=icon,
+                    type="primary" if key == active else "tertiary",
+                    width="stretch",
+                    on_click=_go_to,
+                    args=(key,),
+                )
 
-    # Getting started guide
-    with st.expander("📖 Guía de inicio rápido", expanded=not st.session_state.get('products', [])):
-        st.markdown("""
-        **Para comenzar:**
-        1. **Agregue productos** usando el formulario abajo
-        2. **Conéctelos** creando relaciones entre ellos
-        3. **Explore** descubriendo qué se compra con qué
-        4. **Analice** los componentes para ver grupos de productos
+        products = len(st.session_state.get('products', []))
+        relationships = len(st.session_state.get('relationships', []))
+        groups = len(st.session_state.get('components', []))
+        render(
+            f'<div class="cc-network"><strong>{products}</strong> productos · '
+            f'<strong>{relationships}</strong> relaciones · <strong>{groups}</strong> grupos<br>'
+            'Datos sintéticos de demostración</div>'
+        )
 
-        💡 *Tip: Empiece con productos comunes como Leche, Pan, Huevos*
-        """)
+    return active
