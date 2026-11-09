@@ -1,84 +1,85 @@
 """
-Componente de pestaña de productos para el frontend de ComercioConecta
+Sección del analista para registrar y consultar productos
 """
+from html import escape
+
 import streamlit as st
+
+from frontend.utils import ui
+from frontend.utils.helpers import api_request, load_data
 
 
 def render_product_tab():
-    """Renderiza la pestaña de productos"""
-    st.markdown('<div class="tab-content">', unsafe_allow_html=True)
-    st.header("📦 Productos Registrados")
+    """Renderiza el catálogo y el formulario de productos"""
+    ui.page_header("Productos", "Catálogo sintético que alimenta la red comercial.")
 
-    if st.session_state.get('products', []):
-        # Welcome message with stats
-        st.markdown(f"""
-        <div class="welcome-box">
-            <h4>📊 Resumen del inventario</h4>
-            <p>Tiene <strong>{len(st.session_state.products)}</strong> productos registrados en el sistema.</p>
-            <p>Use el panel lateral para agregar más productos o crear relaciones entre ellos.</p>
-        </div>
-        """, unsafe_allow_html=True)
+    products = st.session_state.get('products', [])
+    connections = _connection_counts()
+    isolated = sum(1 for p in products if not connections.get(p['id']))
 
-        # Display products in an enhanced table format
-        product_data = []
-        for i, product in enumerate(st.session_state.products, 1):
-            product_data.append({
-                "#": i,
-                "ID": product["id"],
-                "Nombre": product["name"],
-                "Fecha agregado": "Reciente"  # We don't have timestamp, but could add later
-            })
+    ui.stats([
+        (len(products), "Productos registrados"),
+        (len(products) - isolated, "Con relaciones"),
+        (isolated, "Sin relaciones"),
+    ])
 
-        if product_data:
-            html = '<table style="width:100%; border-collapse: collapse; margin: 1rem 0;">'
-            html += '<thead><tr>'
-            html += '<th style="text-align: left; padding: 8px; border-bottom: 2px solid #ddd;">#</th>'
-            html += '<th style="text-align: left; padding: 8px; border-bottom: 2px solid #ddd;">ID</th>'
-            html += '<th style="text-align: left; padding: 8px; border-bottom: 2px solid #ddd;">Nombre</th>'
-            html += '<th style="text-align: left; padding: 8px; border-bottom: 2px solid #ddd;">Fecha agregado</th>'
-            html += '</tr></thead><tbody>'
-            for product in product_data:
-                html += '<tr>'
-                html += f'<td style="padding: 8px; border-bottom: 1px solid #eee;">{product["#"]}</td>'
-                html += f'<td style="padding: 8px; border-bottom: 1px solid #eee;">{product["ID"]}</td>'
-                html += f'<td style="padding: 8px; border-bottom: 1px solid #eee;">{product["Nombre"]}</td>'
-                html += f'<td style="padding: 8px; border-bottom: 1px solid #eee;">{product["Fecha agregado"]}</td>'
-                html += '</tr>'
-            html += '</tbody></table>'
-            st.markdown(html, unsafe_allow_html=True)
+    list_col, form_col = st.columns([3, 2], gap="large")
+    with list_col:
+        ui.section("Catálogo")
+        if products:
+            ui.render(_product_table(products, connections))
+        else:
+            ui.empty_state("Aún no hay productos", "Registre el primero con el formulario.")
+    with form_col:
+        ui.section("Agregar producto", "El código se genera automáticamente")
+        _render_form(products)
 
-        # Quick stats
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total productos", len(st.session_state.products))
-        with col2:
-            # Most common starting letter (just for fun)
-            if st.session_state.products:
-                first_letters = [p['name'][0].upper() for p in st.session_state.products if p['name']]
-                if first_letters:
-                    from collections import Counter
-                    most_common = Counter(first_letters).most_common(1)[0]
-                    st.metric("Letra inicial común", f"{most_common[0]} ({most_common[1]})")
-        with col3:
-            st.metric("Última actualización", st.session_state.get('last_update') or "N/A")
-    else:
-        st.markdown("""
-        <div class="welcome-box">
-            <h4>🚀 ¡Comencemos!</h4>
-            <p>No hay productos registrados aún. Use el panel lateral <strong>➕ Agregar Producto</strong> para comenzar.</p>
-            <p><strong>Sugerencias iniciales:</strong> Leche, Pan, Huevos, Mantequilla, Café, Azúcar</p>
-        </div>
-        """, unsafe_allow_html=True)
 
-        # Show some example products as cards
-        st.subheader("Productos sugeridos para comenzar")
-        cols = st.columns(3)
-        examples = ["Leche", "Pan", "Huevos", "Mantequilla", "Café", "Azúcar"]
-        for i, example in enumerate(examples[:6]):
-            with cols[i % 3]:
-                st.markdown(f"""
-                <div style="border: 1px solid #ddd; border-radius: 8px; padding: 10px; text-align: center; margin: 5px 0;">
-                    <strong style="text-transform: capitalize;">{example}</strong>
-                </div>
-                """, unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+def _connection_counts():
+    counts = {}
+    for relationship in st.session_state.get('relationships', []):
+        for key in ('product_a', 'product_b'):
+            counts[relationship[key]] = counts.get(relationship[key], 0) + 1
+    return counts
+
+
+def _product_table(products, connections):
+    rows = []
+    for product in products:
+        count = connections.get(product['id'], 0)
+        rows.append([
+            ui.product_id(product['id']),
+            f"<strong>{escape(product['name'])}</strong>",
+            count,
+            ui.tag("Conectado" if count else "Aislado", "outline" if count else "muted"),
+        ])
+    return ui.table([("Código", False), ("Producto", False), ("Conexiones", True), ("Situación", False)], rows)
+
+
+def _render_form(products):
+    with st.form("add_product_form", clear_on_submit=True, border=True):
+        name = st.text_input("Nombre del producto", placeholder="Ej.: Yogur, Queso, Mermelada")
+        submitted = st.form_submit_button("Agregar producto", type="primary", width="stretch")
+
+    if not submitted:
+        return
+
+    name = name.strip()
+    if not name:
+        st.error("Escriba el nombre del producto.")
+        return
+
+    # El nombre se compara sin distinguir mayúsculas para evitar duplicados
+    existing = next((p for p in products if p['name'].lower() == name.lower()), None)
+    if existing:
+        st.error(f"{existing['name']} ya está registrado con el código {existing['id']}.")
+        return
+
+    data, error = api_request("POST", "/products", {"name": name})
+    if error:
+        st.error(f"No se pudo agregar el producto: {error}")
+        return
+
+    st.toast(f"{name} agregado con el código {data['product']['id']}")
+    load_data()
+    st.rerun()

@@ -31,42 +31,6 @@ def render_sidebar():
         💡 *Tip: Empiece con productos comunes como Leche, Pan, Huevos*
         """)
 
-    # Add product section
-    st.subheader("➕ Agregar Producto")
-    st.caption("El ID se genera automáticamente (P001, P002, ...)")
-    with st.form("add_product_form"):
-        product_name = st.text_input("Nombre del Producto", placeholder="Ej: Yogur, Queso, Mermelada")
-        submitted = st.form_submit_button("Agregar Producto", use_container_width=True)
-
-        if submitted:
-            if product_name.strip():
-                # Validación local: buscar duplicados por nombre (case-insensitive)
-                existing = next((p for p in st.session_state.get('products', [])
-                               if p['name'].lower() == product_name.strip().lower()), None)
-                if existing:
-                    st.error(f"❌ **Producto duplicado**")
-                    with st.expander("Ver detalles del producto existente", expanded=True):
-                        st.write(f"**ID:** {existing['id']}")
-                        st.write(f"**Nombre:** {existing['name']}")
-                        st.info("El producto ya existe en el sistema. Use el ID mostrado para crear relaciones.")
-                else:
-                    # Import here to avoid circular imports
-                    from frontend.utils.helpers import api_request
-                    data, error = api_request("POST", "/products", {"name": product_name.strip()})
-                    if error:
-                        st.error(f"Error: {error}")
-                    else:
-                        generated_id = data.get("product", {}).get("id", "desconocido")
-                        st.success(f"✅ Producto '{product_name.strip()}' agregado con ID {generated_id}")
-                        # Import here to avoid circular imports
-                        from frontend.utils.helpers import load_data
-                        load_data()
-                        st.rerun()
-            else:
-                st.error("El nombre es requerido")
-
-    st.divider()
-
     # Add relationship section
     st.subheader("🔗 Agregar Relación")
     st.caption("Peso = probabilidad de que se compren juntos (1% = rara vez, 100% = siempre)")
