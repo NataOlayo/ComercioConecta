@@ -87,14 +87,3 @@ def load_data():
 def format_pct(weight):
     """Formatea un peso de 0 a 1 como porcentaje"""
     return f"{weight * 100:.1f}".rstrip("0").rstrip(".") + "%"
-
-def get_relationship_strength_color(weight):
-    """Return color based on relationship strength"""
-    if weight >= 0.8:
-        return "#4CAF50"  # Green - strong
-    elif weight >= 0.6:
-        return "#FFC107"  # Amber - medium
-    elif weight >= 0.4:
-        return "#FF9800"  # Orange - weak
-    else:
-        return "#F44336"  # Red - very weak
