@@ -17,12 +17,14 @@ Endpoints:
 - GET /explore/dfs/<product_id>?depth=<int> -> DFS traversal from product_id up to given depth
 - GET /explore/reachability/<product_id>?depth=<int> -> reachability summary (reachable vs unreachable products)
 - GET /components -> list connected components in the graph
+- GET /recommendations/<product_id> -> explainable commercial proposal for a product
 
 Error handling returns appropriate HTTP status codes and JSON error messages.
 """
 from flask import Flask, request, jsonify
 from models import Product, Relationship
 from graph import CommercialGraph
+from recommendation import recommend
 
 app = Flask(__name__)
 graph = CommercialGraph()
@@ -37,6 +39,7 @@ _initial_products = [
     ("P006", "Azúcar"),
     ("P007", "Aceite"),
     ("P008", "Arroz"),
+    ("P009", "Sal"),  # Aislado a propósito: demuestra el caso sin relaciones
 ]
 
 _initial_relationships = [
@@ -320,6 +323,18 @@ def get_components():
             for component in components
         ]
     }), 200
+
+
+@app.route('/recommendations/<product_id>', methods=['GET'])
+def get_recommendations(product_id):
+    """Explainable commercial proposal for a product (see recommendation.py for the rule)"""
+    if not graph.get_products():
+        return jsonify({"error": "La red está vacía: registre productos y relaciones primero"}), 404
+
+    try:
+        return jsonify(recommend(graph, product_id)), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
 
 
 @app.errorhandler(404)
