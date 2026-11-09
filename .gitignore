@@ -19,7 +19,8 @@ __pycache__/
 Thumbs.db
 
 # Streamlit
-.streamlit/
+.streamlit/*
+!.streamlit/config.toml
 
 # Virtual environments
 venv/
