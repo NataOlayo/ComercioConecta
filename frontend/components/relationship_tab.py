@@ -1,87 +1,97 @@
 """
-Componente de pestaña de relaciones para el frontend de ComercioConecta
+Sección del analista para registrar y consultar relaciones de co-compra
 """
+from html import escape
+
 import streamlit as st
-from collections import Counter
+
+from frontend.utils import ui
+from frontend.utils.helpers import api_request, format_pct, load_data
 
 
 def render_relationship_tab():
-    """Renderiza la pestaña de relaciones"""
-    st.markdown('<div class="tab-content">', unsafe_allow_html=True)
-    st.header("🔗 Relaciones Registradas")
+    """Renderiza las relaciones y su formulario"""
+    ui.page_header(
+        "Relaciones",
+        "Cada relación une dos productos que se compran juntos. A–B vale lo mismo que B–A.",
+    )
 
-    if st.session_state.get('relationships', []):
-        # Relationship stats
-        strong_count = sum(1 for r in st.session_state.relationships if r['weight'] >= 0.7)
-        medium_count = sum(1 for r in st.session_state.relationships if 0.4 <= r['weight'] < 0.7)
-        weak_count = sum(1 for r in st.session_state.relationships if r['weight'] < 0.4)
+    relationships = st.session_state.get('relationships', [])
+    bands = [ui.strength_band(r['weight'])[0] for r in relationships]
+    ui.stats([
+        (len(relationships), "Relaciones registradas"),
+        (bands.count("Fuerte"), "Fuertes: 70 % o más"),
+        (bands.count("Moderada"), "Moderadas: 40 % a 69 %"),
+        (bands.count("Débil"), "Débiles: menos de 40 %"),
+    ])
 
-        st.markdown(f"""
-        <div class="welcome-box">
-            <h4>📊 Estadísticas de relaciones</h4>
-            <p>Tiene <strong>{len(st.session_state.relationships)}</strong> relaciones registradas:</p>
-            <ul>
-                <li>🟢 <strong>Fuertes (≥70%)</strong>: {strong_count}</li>
-                <li>🟡 <strong>Medianas (40-69%)</strong>: {medium_count}</li>
-                <li>🔴 <strong>Débiles (<40%)</strong>: {weak_count}</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
+    list_col, form_col = st.columns([3, 2], gap="large")
+    with list_col:
+        ui.section("Red de co-compra", "De la más fuerte a la más débil")
+        if relationships:
+            ui.render(_relationship_table(relationships))
+        else:
+            ui.empty_state("Aún no hay relaciones", "Registre al menos dos productos y conéctelos con el formulario.")
+    with form_col:
+        ui.section("Agregar relación", "El peso es un índice simétrico de co-compra")
+        _render_form(relationships)
 
-        # Build product lookup for names
-        product_lookup = {p['id']: f"{p['id']} - {p['name']}" for p in st.session_state.get('products', [])}
 
-        # Display relationships in an enhanced table format with visual indicators
-        relationship_data = []
-        for rel in st.session_state.relationships:
-            from frontend.utils.helpers import get_relationship_strength_color
-            color = get_relationship_strength_color(rel['weight'])
-            relationship_data.append({
-                "Producto A": product_lookup.get(rel["product_a"], rel["product_a"]),
-                "Producto B": product_lookup.get(rel["product_b"], rel["product_b"]),
-                "Fuerza": f"<span style='color: {color}; font-weight: bold;'>{rel['weight'] * 100:.0f}%</span>",
-                "Tipo": "🟢 Fuerte" if rel['weight'] >= 0.7 else "🟡 Media" if rel['weight'] >= 0.4 else "🔴 Débil"
-            })
+def _names():
+    return {p['id']: p['name'] for p in st.session_state.get('products', [])}
 
-        st.write("### Tabla de relaciones")
-        if relationship_data:
-            html = '<table style="width:100%; border-collapse: collapse; margin: 1rem 0;">'
-            html += '<thead><tr>'
-            html += '<th style="text-align: left; padding: 8px; border-bottom: 2px solid #ddd;">Producto A</th>'
-            html += '<th style="text-align: left; padding: 8px; border-bottom: 2px solid #ddd;">Producto B</th>'
-            html += '<th style="text-align: left; padding: 8px; border-bottom: 2px solid #ddd;">Fuerza</th>'
-            html += '<th style="text-align: left; padding: 8px; border-bottom: 2px solid #ddd;">Tipo</th>'
-            html += '</tr></thead><tbody>'
-            for rel in relationship_data:
-                html += '<tr>'
-                html += f'<td style="padding: 8px; border-bottom: 1px solid #eee;">{rel["Producto A"]}</td>'
-                html += f'<td style="padding: 8px; border-bottom: 1px solid #eee;">{rel["Producto B"]}</td>'
-                html += f'<td style="padding: 8px; border-bottom: 1px solid #eee;">{rel["Fuerza"]}</td>'
-                html += f'<td style="padding: 8px; border-bottom: 1px solid #eee;">{rel["Tipo"]}</td>'
-                html += '</tr>'
-            html += '</tbody></table>'
-            st.markdown(html, unsafe_allow_html=True)
 
-        # Show strongest relationships highlighted
-        if st.session_state.relationships:
-            strongest = max(st.session_state.relationships, key=lambda x: x['weight'])
-            prod_a = next((p for p in st.session_state.get('products', []) if p['id'] == strongest['product_a']), None)
-            prod_b = next((p for p in st.session_state.get('products', []) if p['id'] == strongest['product_b']), None)
-            name_a = f"{prod_a['id']} - {prod_a['name']}" if prod_a else strongest['product_a']
-            name_b = f"{prod_b['id']} - {prod_b['name']}" if prod_b else strongest['product_b']
+def _relationship_table(relationships):
+    names = _names()
+    rows = [
+        [
+            f"<strong>{escape(names.get(r['product_a'], r['product_a']))}</strong> ↔ "
+            f"<strong>{escape(names.get(r['product_b'], r['product_b']))}</strong>",
+            format_pct(r['weight']),
+            ui.meter(r['weight']),
+            ui.strength(r['weight']),
+        ]
+        for r in sorted(relationships, key=lambda r: -r['weight'])
+    ]
+    return ui.table([("Productos", False), ("Co-compra", True), ("", False), ("Fuerza", False)], rows)
 
-            st.info(f"🔥 **Relación más fuerte:** {name_a} ↔ {name_b} ({strongest['weight'] * 100:.0f}%)")
-    else:
-        st.markdown("""
-        <div class="welcome-box">
-            <h4>🔗 Comience a conectar productos</h4>
-            <p>No hay relaciones registradas aún. Primero necesita al menos 2 productos, luego use el panel lateral para crear relaciones entre ellos.</p>
-            <p><strong>Ejemplo de relaciones útiles:</strong></p>
-            <ul>
-                <li>Leche ↔ Pan (desayuno)</li>
-                <li>Café ↔ Azúcar (endulzante)</li>
-                <li>Huevos ↔ Mantequilla (cocina)</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+
+def _render_form(relationships):
+    names = _names()
+    if len(names) < 2:
+        ui.empty_state("Faltan productos", "Necesita al menos dos productos para crear una relación.")
+        return
+
+    options = list(names)
+    label = lambda product_id: f"{names[product_id]} · {product_id}"
+
+    with st.form("add_relationship_form", border=True):
+        product_a = st.selectbox("Producto A", options, index=0, format_func=label, key="rel_a")
+        product_b = st.selectbox("Producto B", options, index=1, format_func=label, key="rel_b")
+        percent = st.slider("Co-compra (%)", min_value=5, max_value=100, value=50, step=5)
+        submitted = st.form_submit_button("Agregar relación", type="primary", width="stretch")
+
+    if not submitted:
+        return
+
+    if product_a == product_b:
+        st.error("Elija dos productos diferentes.")
+        return
+
+    # La relación es simétrica: A-B y B-A son la misma
+    if any({r['product_a'], r['product_b']} == {product_a, product_b} for r in relationships):
+        st.error(f"Ya existe una relación entre {names[product_a]} y {names[product_b]}.")
+        return
+
+    _, error = api_request("POST", "/relationships", {
+        "product_a": product_a,
+        "product_b": product_b,
+        "weight": percent / 100,
+    })
+    if error:
+        st.error(f"No se pudo agregar la relación: {error}")
+        return
+
+    st.toast(f"Relación agregada: {names[product_a]} ↔ {names[product_b]} ({percent} %)")
+    load_data()
+    st.rerun()
