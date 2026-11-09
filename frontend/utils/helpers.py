@@ -56,9 +56,10 @@ def load_data():
     # Load products
     products_data, error = api_request("GET", "/products")
     if error:
-        st.error(f"Error cargando productos: {error}")
-    else:
-        st.session_state.products = products_data.get("products", [])
+        # Si la API no responde, un solo aviso basta
+        st.error(error)
+        return
+    st.session_state.products = products_data.get("products", [])
 
     # Load relationships
     relationships_data, error = api_request("GET", "/relationships")
@@ -82,6 +83,10 @@ def load_data():
         st.session_state.components = components_data.get("components", [])
 
     st.session_state.last_update = datetime.now().strftime("%H:%M:%S")
+
+def format_pct(weight):
+    """Formatea un peso de 0 a 1 como porcentaje"""
+    return f"{weight * 100:.1f}".rstrip("0").rstrip(".") + "%"
 
 def get_relationship_strength_color(weight):
     """Return color based on relationship strength"""

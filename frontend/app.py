@@ -24,6 +24,7 @@ from frontend.components.product_tab import render_product_tab
 from frontend.components.relationship_tab import render_relationship_tab
 from frontend.components.exploration_tab import render_exploration_tab
 from frontend.components.component_tab import render_component_tab
+from frontend.theme import apply_theme
 
 # Import utilities
 from frontend.utils.helpers import api_request, initialize_session_state, load_data
@@ -38,6 +39,7 @@ def main():
         layout="wide",
         initial_sidebar_state="expanded"
     )
+    apply_theme()
 
     # Custom CSS for better visual appeal
     st.markdown("""
