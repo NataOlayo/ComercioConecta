@@ -1,14 +1,16 @@
 """
-Sección principal del encargado de ventas.
-A la vista, la respuesta en lenguaje de tienda; los cálculos quedan en desplegables.
+Main section for the sales clerk (encargado de ventas).
+Shows store-language recommendations upfront; calculations in expandables.
+Now includes graph visualization (Feature 4) in the right column.
 """
 from html import escape
 
 import streamlit as st
 
 from frontend.components.product_picker import current_product, render_product_picker
+from frontend.components.graph_visualization import render_graph_visualization
 from frontend.utils import ui
-from frontend.utils.helpers import api_request, format_pct
+from frontend.utils.helpers import api_request, format_pct, load_data
 
 DEPTH_LABELS = {
     1: "Solo relaciones directas",
@@ -25,24 +27,43 @@ INDIRECT = "indirecta"
 
 
 def render_exploration_tab():
-    """Renderiza las recomendaciones del producto elegido"""
+    """Render recommendations for the selected product with graph visualization."""
     products = st.session_state.get('products', [])
     if not products:
-        ui.page_header("¿Qué le ofrezco al cliente?", "Elija lo que lleva el cliente y vea qué más le puede ofrecer.")
-        ui.empty_state("Aún no hay productos", "Registre productos y relaciones para recibir recomendaciones.")
+        ui.page_header(
+            "¿Qué le ofrezco al cliente?",
+            "Elija lo que lleva el cliente y vea qué más le puede ofrecer."
+        )
+        ui.empty_state(
+            "Aún no hay productos",
+            "Registre productos y relaciones para recibir recomendaciones."
+        )
         return
 
-    ui.page_header("¿Qué le ofrezco al cliente?", "Elija lo que lleva el cliente en su tiquete y vea qué más le puede ofrecer.")
+    ui.page_header(
+        "¿Qué le ofrezco al cliente?",
+        "Elija lo que lleva el cliente en su tiquete y vea qué más le puede ofrecer."
+    )
     product_id = current_product(products, st.session_state.get('relationships', []))
 
-    # Se consulta en cada render para reflejar de inmediato el producto elegido
+    # Fetch recommendations
     data, error = api_request("GET", f"/recommendations/{product_id}")
 
-    # Feature 4: la columna derecha queda libre para la visualización de conexiones
-    ticket_col, _free_col = st.columns([5, 4], gap="large")
+    # Fetch graph data for visualization
+    graph_data, _ = api_request("GET", "/graph/info")
+
+    # Fetch reachability for highlighting
+    reachability_data, _ = api_request("GET", f"/explore/reachability/{product_id}?depth=2")
+    reachable_ids = []
+    if reachability_data and not isinstance(reachability_data, dict):
+        reachable_ids = [r['product_id'] for r in reachability_data.get('reachable', [])]
+
+    # Layout: ticket on left, graph visualization on right (Feature 4)
+    ticket_col, graph_col = st.columns([5, 4], gap="large")
+
     with ticket_col:
-        # El selector es la línea "lleva" del tiquete: un widget no cabe dentro de HTML,
-        # así que el contenedor hace de papel y el tiquete se arma en tres partes
+        # The selector is the "lleva" line of the ticket: a widget doesn't fit inside HTML,
+        # so the container acts as paper and the ticket is built in three parts
         with st.container(key="cc_ticket"):
             ui.render(_ticket_head())
             render_product_picker(products, product_id)
@@ -50,6 +71,19 @@ def render_exploration_tab():
                 st.error(f"No se pudieron generar las recomendaciones: {error}")
             else:
                 ui.render(_ticket_body(data))
+
+    with graph_col:
+        # Feature 4: Graph visualization of connections
+        ui.page_header(
+            "Red de conexiones",
+            f"Visualización interactiva desde {data.get('product_name', 'el producto seleccionado') if not error else 'el producto'}"
+        )
+        render_graph_visualization(
+            graph_data,
+            selected_product_id=product_id,
+            reachable_products=reachable_ids,
+            depth=2
+        )
 
     if not error:
         with st.expander("Ver detalle técnico: cómo se calculó", icon=":material/calculate:"):
@@ -70,7 +104,7 @@ def _ticket_head():
 
 
 def _ticket_body(data):
-    """Lo que se ofrece al cliente: directas, indirectas y lo que no se recomienda."""
+    """What to offer the customer: direct, indirect, and what not to recommend."""
     direct = [p for p in data["proposals"] if p["type"] == DIRECT]
     indirect = [p for p in data["proposals"] if p["type"] == INDIRECT]
 
@@ -221,8 +255,11 @@ def _render_advanced_analysis(product_id):
                     st.error(f"Error: {error}")
                 else:
                     results[name] = data
+                    # Refresh to update graph visualization
+                    load_data()
+                    st.rerun()
 
-    # Solo se muestran resultados del producto elegido, no los de una consulta anterior
+    # Only show results for the selected product, not from a previous query
     for name, title in (("bfs", "BFS: exploración por niveles"), ("dfs", "DFS: exploración en profundidad")):
         data = results.get(name)
         if data and data["start_product"] == product_id:
