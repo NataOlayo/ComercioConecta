@@ -3,3 +3,6 @@
 # Versiones especificadas para garantizar compatibilidad y evitar actualizaciones rotas.
 Flask>=3.0,<4.0
 streamlit>=1.64,<2.0
+requests>=2.31,<3.0
+networkx>=3.2,<4.0
+pyvis>=0.3,<1.0
